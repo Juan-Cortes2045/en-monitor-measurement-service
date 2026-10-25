@@ -136,6 +136,22 @@ class CachedDeviceDirectoryTest {
     }
 
     @Test
+    @DisplayName("a device exists whether or not it is linked, from the same cached request as its home")
+    void exists() {
+        given(client.device("DEV0000001")).willReturn(Optional.of(FRIDGE));
+        given(client.device("DEV0000002")).willReturn(Optional.of(new RemoteDevice("DEV0000002", null)));
+        given(client.device("DEV0000099")).willReturn(Optional.empty());
+
+        assertThat(devices.exists("DEV0000001")).isTrue();
+        assertThat(devices.homeOf("DEV0000001")).contains("hom0000001");
+        assertThat(devices.exists("DEV0000002")).isTrue();
+        assertThat(devices.exists("DEV0000099")).isFalse();
+        assertThat(devices.exists(null)).isFalse();
+
+        verify(client, times(1)).device("DEV0000001");
+    }
+
+    @Test
     @DisplayName("no device asked is no request")
     void nothingAsked() {
         assertThat(devices.homeOf(null)).isEmpty();
