@@ -5,9 +5,9 @@ and serves the consumption history, statistics and levels of a device and of a h
 Java 21, hexagonal architecture.
 
 It is being extracted from the `measurement` module of `energy-monitor-backend`, following the same
-steps as the security and device services. Until the extraction ends, energy-monitor-backend keeps
-storing the readings and answering these endpoints: the gateway does not route to this service and
-its MQTT subscription is off.
+steps as the security and device services. The gateway routes these endpoints here, and in the
+infra stack this service is the only one subscribed to the telemetry; energy-monitor-backend reads
+levels and energy from its internal API and hears every reading for its alerts.
 
 ## What it serves
 
@@ -66,9 +66,9 @@ replayed from a module's offline queue land at the time they were taken.
   another device or that does not parse is logged and dropped.
 - A reading is stored only for a device the device service knows (cached 30 s); while the service
   does not answer and nothing was kept, the reading is dropped.
-- **Off by default** (`MEASUREMENT_MQTT_ENABLED=false`): while energy-monitor-backend still stores
-  the readings, both subscribed would store each one twice in the shared table. It is turned on
-  when the backend stops subscribing. The test profile keeps it off.
+- **Off by default** (`MEASUREMENT_MQTT_ENABLED=false`), so a run from the IDE or the tests never
+  takes the readings by surprise; the infra stack turns it on. Only one subscriber may store them:
+  two would store every reading twice in the shared table. The test profile keeps it off.
 
 ## Events it publishes (RabbitMQ)
 
@@ -142,13 +142,25 @@ SPRING_DATASOURCE_PASSWORD=... RABBITMQ_USERNAME=... RABBITMQ_PASSWORD=... ./mvn
 The tests run under the `test` profile against the MySQL of `infra`, with a key pair generated
 for the run. They never reach a running backend, device service or MQTT broker.
 
-## Docker
+## Docker and CI/CD
 
 ```bash
 docker build -t energy-monitor-measurement .
 ```
 
-Multi-stage build (Maven on JDK 21, then JRE 21), running as uid 10001, port 8085.
+Multi-stage build (Maven on JDK 21, then JRE 21), running as uid 10001. The infra repository builds
+it as `measurement` (`infra/docker-compose.yml`, `infra/docker-compose.prod.yml`) with the MQTT
+subscription on (`MEASUREMENT_MQTT_ENABLED=true`): no published port, `public.pem` only, health on
+`/actuator/health`. The gateway and the backend reach it as `measurement:8085`.
+
+`.github/workflows/ci-cd.yml`:
+
+- on every pull request and push to `dev` and `main`: `./mvnw test` against a MySQL 8.4 service of
+  the runner (no RabbitMQ or broker needed), and `docker build`;
+- after a push to `main`, and the approval of the `production` environment: `infra/deploy/deploy.sh
+  measurement` over SSH, which rebuilds only this container and waits for every service to be
+  healthy, then a smoke test through the gateway. The environment needs the same secrets as the
+  other repositories: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_SSH_KEY` and `DEPLOY_KNOWN_HOSTS`.
 
 ## Database
 
