@@ -56,6 +56,27 @@ replayed from a module's offline queue land at the time they were taken.
   the readings, both subscribed would store each one twice in the shared table. It is turned on
   when the backend stops subscribing. The test profile keeps it off.
 
+## Events it publishes (RabbitMQ)
+
+Every stored reading is announced on the topic exchange `energy-monitor.measurement`, through a
+transactional outbox (`measurement_outbox`, changelog `measurement-004`):
+
+| Routing key | Payload | Raised when |
+|---|---|---|
+| `measurement.recorded` | `{idMeasurement, deviceId, dateTime, voltage, current, activePower, storedEnergy}` | A reading is stored |
+
+- The message is written in the transaction of the reading (`TransactionalRegisterMeasurement`):
+  one never commits without the other.
+- A relay publishes the pending messages every second, oldest first, up to 50 per run. A message
+  counts as published only when the broker confirms it (correlated confirms) and a queue took it;
+  until energy-monitor-backend declares its queue they stay pending. The first failure stops the
+  run, so the order holds. Delivery is at least once, with the message id.
+- One message per reading: published and discarded messages are purged after 7 days
+  (`messaging.retention`), every hour. Pending ones are never purged.
+- Settings: `RABBITMQ_*` and `messaging.*`. The test profile turns the relay and the purge off and
+  stores the messages already discarded. `RabbitMeasurementOutboxPublisherBrokerTest` runs against
+  the RabbitMQ of infra when it is reachable and is skipped otherwise.
+
 ## Events it consumes (RabbitMQ)
 
 | Queue | Exchange and routing keys | What it does |
@@ -115,8 +136,8 @@ Multi-stage build (Maven on JDK 21, then JRE 21), running as uid 10001, port 808
 
 ## Database
 
-This service owns `measurement` and `consumption_level`. The changelogs `measurement-001` to
-`measurement-003` keep the path they had in energy-monitor-backend
+This service owns `measurement`, `consumption_level` and `measurement_outbox`. The changelogs
+`measurement-001` to `measurement-003` keep the path they had in energy-monitor-backend
 (`db/changelog/measurement/changes/...`), so on a database the monolith already migrated Liquibase
 recognises them as applied and never runs them twice. `device_id` refers to a device by identifier
 only: no foreign key across services.
