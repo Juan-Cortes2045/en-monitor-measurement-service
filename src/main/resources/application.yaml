@@ -22,6 +22,24 @@ spring:
     # each service applies its own changelogs.
     change-log: classpath:db/changelog/db.changelog-master.xml
 
+  # Message broker (RabbitMQ, from infra): the device events this service hears. Each consumer
+  # declares and binds its own queue.
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:energy-monitor}
+    password: ${RABBITMQ_PASSWORD:}
+    listener:
+      simple:
+        # A message that keeps failing is retried three times, one, two and four seconds apart,
+        # and then moved to the dead-letter queue of its queue instead of blocking the ones behind.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+
 server:
   # 8080 is the API gateway, 8082 the security service, 8083 energy-monitor-backend and 8084 the
   # device service when all run on the same machine.
@@ -37,6 +55,12 @@ server:
     # 127.0.0.1.
     remoteip:
       internal-proxies: "127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|0:0:0:0:0:0:0:1|::1|172\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}"
+
+messaging:
+  # Topic exchange the device service publishes to (device.linked and device.unlinked are heard
+  # here), and the dead-letter exchange of the queues this service consumes.
+  device-exchange: energy-monitor.device
+  dead-letter-exchange: measurement-service.dlx
 
 security:
   jwt:

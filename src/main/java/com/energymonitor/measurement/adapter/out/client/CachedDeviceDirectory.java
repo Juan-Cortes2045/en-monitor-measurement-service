@@ -16,14 +16,14 @@ import java.util.function.Function;
  *
  * <p>Answers are reused for a short while, a device that does not exist included, so a dashboard
  * refreshing every few seconds costs one request per {@code ttl}, not one per refresh. A device
- * linked or unlinked in the service shows here once its entry expires, or at once when
- * {@link #forget} is called for it.
+ * linked or unlinked in the service shows here at once, when its event arrives and
+ * {@link #forget} is called, or at the latest once its entry expires.
  *
  * <p>The last answer is also kept for {@code staleTtl}: when the service does not answer, that is
  * what is served, so a short outage of the device service does not stop the readings of devices
  * already known. Only with nothing kept does a call throw {@link DeviceServiceUnavailableException}.
  */
-public class CachedDeviceDirectory {
+public class CachedDeviceDirectory implements DeviceChanges {
 
     private final DeviceServiceClient client;
     private final Cache<String, Optional<RemoteDevice>> devices;
@@ -78,10 +78,12 @@ public class CachedDeviceDirectory {
 
     /**
      * Drops what is known of a device and of a home, so the next call asks the service again.
+     * Called when the device service announces a link or an unlink.
      *
      * @param deviceId the device that changed, may be null
      * @param homeId   the home it joined or left, may be null
      */
+    @Override
     public void forget(String deviceId, String homeId) {
         if (deviceId != null) {
             devices.invalidate(deviceId);
