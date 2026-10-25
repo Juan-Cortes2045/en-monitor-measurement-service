@@ -22,13 +22,17 @@ spring:
     # each service applies its own changelogs.
     change-log: classpath:db/changelog/db.changelog-master.xml
 
-  # Message broker (RabbitMQ, from infra): the device events this service hears. Each consumer
-  # declares and binds its own queue.
+  # Message broker (RabbitMQ, from infra): the readings this service announces, and the device
+  # events it hears. Each consumer declares and binds its own queue.
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USERNAME:energy-monitor}
     password: ${RABBITMQ_PASSWORD:}
+    # A message is marked as published only after the broker confirms it and a queue took it
+    # (correlated: the return of an unrouted message is known before the confirmation completes).
+    publisher-confirm-type: correlated
+    publisher-returns: true
     listener:
       simple:
         # A message that keeps failing is retried three times, one, two and four seconds apart,
@@ -57,6 +61,17 @@ server:
       internal-proxies: "127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|0:0:0:0:0:0:0:1|::1|172\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}"
 
 messaging:
+  # Topic exchange of everything this service announces; the routing key is the message type
+  # (measurement.recorded, one per reading). The outbox relay runs every second, up to 50
+  # messages, each confirmed by the broker within 5 s. Delivered messages are kept 7 days, then
+  # purged every hour.
+  exchange: energy-monitor.measurement
+  relay-enabled: true
+  poll-interval: PT1S
+  batch-size: 50
+  confirm-timeout: PT5S
+  retention: P7D
+  purge-interval: PT1H
   # Topic exchange the device service publishes to (device.linked and device.unlinked are heard
   # here), and the dead-letter exchange of the queues this service consumes.
   device-exchange: energy-monitor.device
