@@ -41,3 +41,10 @@ mqtt:
   inbound:
     # No subscription in the suite: the handler is tested directly.
     enabled: false
+
+messaging:
+  # The suite writes to the shared database, and its outbox rows must not reach a broker a
+  # running backend consumes. Stored already discarded, a service started later on the same
+  # database never publishes them either. The relay is covered by MeasurementOutboxRelayTest.
+  relay-enabled: false
+  discard-written: true
