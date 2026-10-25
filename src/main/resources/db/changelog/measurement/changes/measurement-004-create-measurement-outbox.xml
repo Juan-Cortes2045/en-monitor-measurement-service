@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!--
+        Transactional outbox of the measurement service.
+
+        Every recorded reading is announced to energy-monitor-backend, whose alerts evaluate it.
+        The message is written here in the same transaction as the reading, and a relay publishes
+        it to the message broker afterwards. A reading is therefore never committed without its
+        message, and a message is never sent for a reading that rolled back.
+
+        One message per reading: rows already published or discarded are purged after a few days.
+    -->
+    <changeSet id="measurement-004-create-measurement-outbox" author="JuanCortes2045">
+        <comment>Creates the measurement_outbox table of the transactional outbox.</comment>
+
+        <createTable tableName="measurement_outbox">
+            <!-- Also the message id on the broker: consumers use it to drop duplicates. -->
+            <column name="id_message" type="VARCHAR(10)">
+                <constraints primaryKey="true" primaryKeyName="pk_measurement_outbox" nullable="false"/>
+            </column>
+            <!-- Routing key on the broker, for example measurement.recorded. -->
+            <column name="message_type" type="VARCHAR(60)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="payload" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="occurred_at" type="DATETIME(6)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="published_at" type="DATETIME(6)"/>
+            <column name="discarded_at" type="DATETIME(6)"/>
+            <column name="attempts" type="INT" defaultValueNumeric="0">
+                <constraints nullable="false"/>
+            </column>
+            <column name="last_error" type="VARCHAR(255)"/>
+        </createTable>
+
+        <!-- The relay reads the pending messages in order. -->
+        <createIndex tableName="measurement_outbox" indexName="idx_measurement_outbox_pending">
+            <column name="published_at"/>
+            <column name="discarded_at"/>
+            <column name="occurred_at"/>
+        </createIndex>
+
+        <!-- The purge removes the discarded messages by age. -->
+        <createIndex tableName="measurement_outbox" indexName="idx_measurement_outbox_discarded">
+            <column name="discarded_at"/>
+        </createIndex>
+
+        <rollback>
+            <dropTable tableName="measurement_outbox"/>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

@@ -1,0 +1,142 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: measurement-service
+
+  profiles:
+    default: local
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  liquibase:
+    # Only the measurement changesets. The schema is shared with energy-monitor-backend, the
+    # security service and the device service (ADR-003), and so is the DATABASECHANGELOG table:
+    # each service applies its own changelogs.
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  # Message broker (RabbitMQ, from infra): the readings this service announces, and the device
+  # events it hears. Each consumer declares and binds its own queue.
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:energy-monitor}
+    password: ${RABBITMQ_PASSWORD:}
+    # A message is marked as published only after the broker confirms it and a queue took it
+    # (correlated: the return of an unrouted message is known before the confirmation completes).
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    listener:
+      simple:
+        # A message that keeps failing is retried three times, one, two and four seconds apart,
+        # and then moved to the dead-letter queue of its queue instead of blocking the ones behind.
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1s
+          multiplier: 2
+
+server:
+  # 8080 is the API gateway, 8082 the security service, 8083 energy-monitor-backend and 8084 the
+  # device service when all run on the same machine.
+  port: ${SERVER_PORT:8085}
+  # The web and mobile requests come through the API gateway: from it (loopback or a Docker
+  # network) the container takes the caller's address and scheme from X-Forwarded-For and
+  # X-Forwarded-Proto. A call from outside relayed with a forwarded address therefore counts as
+  # that address, and the internal API refuses it.
+  forward-headers-strategy: native
+  tomcat:
+    # Only loopback (the gateway or nginx on this machine) and the Docker networks may set it: the
+    # default would trust every private network, and a machine of the LAN could then pass as
+    # 127.0.0.1.
+    remoteip:
+      internal-proxies: "127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|0:0:0:0:0:0:0:1|::1|172\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}"
+
+messaging:
+  # Topic exchange of everything this service announces; the routing key is the message type
+  # (measurement.recorded, one per reading). The outbox relay runs every second, up to 50
+  # messages, each confirmed by the broker within 5 s. Delivered messages are kept 7 days, then
+  # purged every hour.
+  exchange: energy-monitor.measurement
+  relay-enabled: true
+  poll-interval: PT1S
+  batch-size: 50
+  confirm-timeout: PT5S
+  retention: P7D
+  purge-interval: PT1H
+  # Topic exchange the device service publishes to (device.linked and device.unlinked are heard
+  # here), and the dead-letter exchange of the queues this service consumes.
+  device-exchange: energy-monitor.device
+  dead-letter-exchange: measurement-service.dlx
+
+security:
+  jwt:
+    # The access tokens are issued by the security service; this service only validates them, with
+    # the service's public key and its iss claim (the value the monolith used, kept unchanged).
+    issuer: https://energy-monitor-backend
+    public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
+
+# Calls between this service and the other services. Outbound to the owners of homes and devices:
+# whether a caller belongs to a home and its limits (energy-monitor-backend), and which home a
+# device is linked to (the device service); no answer within the timeouts refuses the request with
+# 503. Inbound, energy-monitor-backend reads /internal/measurements/** and
+# /internal/consumption-levels. Each side checks the other's network and the shared token; the
+# reverse proxy never forwards /internal/**.
+internal-api:
+  # Same value in every service. Empty refuses every inbound internal call.
+  # Generate with: openssl rand -hex 32
+  token: ${INTERNAL_API_TOKEN:}
+  allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
+  backend-url: ${BACKEND_INTERNAL_URL:http://localhost:8083}
+  device-service-url: ${DEVICE_SERVICE_URL:http://localhost:8084}
+  connect-timeout: PT1S
+  read-timeout: PT2S
+  # A device, or the devices of a home, are reused for 30 s; the last answer is served for up to
+  # an hour while the device service does not answer.
+  device-ttl: PT30S
+  device-stale-ttl: PT1H
+
+mqtt:
+  # This service subscribes over the plain listener: the broker runs next to it, so this
+  # connection never leaves the host; devices use TLS.
+  broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+  # Suffixed with -telemetry. Must differ per instance and from the device service's and the
+  # backend's, which subscribe to the same topic.
+  client-id: ${MQTT_CLIENT_ID:measurement-service}
+  # The broker asks the device service whether these credentials are valid; it is given the same
+  # MQTT_MEASUREMENT_SERVICE_USER and MQTT_MEASUREMENT_SERVICE_PASS, and lets this user only read
+  # the telemetry.
+  username: ${MQTT_MEASUREMENT_SERVICE_USER:em-measurement-service}
+  password: ${MQTT_MEASUREMENT_SERVICE_PASS:}
+  inbound:
+    # Off until energy-monitor-backend stops storing the readings: with both subscribed every
+    # reading would be stored twice in the shared table.
+    enabled: ${MEASUREMENT_MQTT_ENABLED:false}
+  topics:
+    telemetry: energy-monitor/devices/+/telemetry
+  qos: 0
+  keep-alive-interval: 60
+  clean-session: true
+  connection-timeout: 30
+  # How long a subscribe, unsubscribe or disconnect waits for the broker, and how long a stopping
+  # subscription lets in-flight work finish (Paho waits 30 s for each).
+  completion-timeout: PT5S
+
+measurement:
+  # A reading older than this no longer counts as the current power of a home: the threshold after
+  # which the device service marks a silent device offline (its DEVICE_OFFLINE_AFTER).
+  current-power-freshness: ${DEVICE_OFFLINE_AFTER:PT150S}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
