@@ -84,13 +84,17 @@ security:
     issuer: https://energy-monitor-backend
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
 
-# Calls from this service to the owners of homes and devices: whether a caller belongs to a home
-# and its limits (energy-monitor-backend), and which home a device is linked to (the device
-# service). No answer within the timeouts refuses the request with 503. Each of them checks this
-# service's network and the shared token; the reverse proxy never forwards /internal/**.
+# Calls between this service and the other services. Outbound to the owners of homes and devices:
+# whether a caller belongs to a home and its limits (energy-monitor-backend), and which home a
+# device is linked to (the device service); no answer within the timeouts refuses the request with
+# 503. Inbound, energy-monitor-backend reads /internal/measurements/** and
+# /internal/consumption-levels. Each side checks the other's network and the shared token; the
+# reverse proxy never forwards /internal/**.
 internal-api:
-  # Same value in every service. Generate with: openssl rand -hex 32
+  # Same value in every service. Empty refuses every inbound internal call.
+  # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
+  allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
   backend-url: ${BACKEND_INTERNAL_URL:http://localhost:8083}
   device-service-url: ${DEVICE_SERVICE_URL:http://localhost:8084}
   connect-timeout: PT1S
