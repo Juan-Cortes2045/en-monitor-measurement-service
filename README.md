@@ -6,7 +6,8 @@ Java 21, hexagonal architecture.
 
 It is being extracted from the `measurement` module of `energy-monitor-backend`, following the same
 steps as the security and device services. Until the extraction ends, energy-monitor-backend keeps
-storing the readings and answering these endpoints; the gateway does not route to this service yet.
+storing the readings and answering these endpoints: the gateway does not route to this service and
+its MQTT subscription is off.
 
 ## What it serves
 
@@ -40,6 +41,21 @@ exist.
   not answer.
 - No answer and nothing kept: the request gets 503.
 
+## Readings (MQTT)
+
+This service subscribes to `energy-monitor/devices/+/telemetry` with its own MQTT user
+(`MQTT_MEASUREMENT_SERVICE_USER`, which the broker lets only read the telemetry) and client id
+(`${MQTT_CLIENT_ID}-telemetry`), and stores every reading with the device timestamp, so samples
+replayed from a module's offline queue land at the time they were taken.
+
+- The topic, not the payload, identifies the device. A message on an unexpected topic, that claims
+  another device or that does not parse is logged and dropped.
+- A reading is stored only for a device the device service knows (cached 30 s); while the service
+  does not answer and nothing was kept, the reading is dropped.
+- **Off by default** (`MEASUREMENT_MQTT_ENABLED=false`): while energy-monitor-backend still stores
+  the readings, both subscribed would store each one twice in the shared table. It is turned on
+  when the backend stops subscribing. The test profile keeps it off.
+
 ## Events it consumes (RabbitMQ)
 
 | Queue | Exchange and routing keys | What it does |
@@ -52,9 +68,9 @@ exist.
   dropped.
 - A message may arrive twice: forgetting twice only costs one more request.
 - Without a broker the cache still expires after 30 s, and the health is DOWN.
-- The test profile does not start the consumers. `DeviceLinksBrokerTest` runs against the RabbitMQ
-  of infra when it is reachable (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is
-  skipped otherwise.
+- The test profile does not start the consumers. `DeviceEventsBrokerTest` runs against the RabbitMQ
+  of infra when it is reachable (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`), with
+  exchanges and a queue of its own, and is skipped otherwise.
 
 ## Behind the gateway
 
@@ -65,7 +81,7 @@ scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (`server.forward-headers-str
 ## Requirements
 
 - Java 21 (the repository brings `./mvnw`, no Maven install needed).
-- MySQL and RabbitMQ from the `infra` repository: the schema is shared with
+- MySQL, RabbitMQ and Mosquitto from the `infra` repository: the schema is shared with
   `energy-monitor-backend`, the security service and the device service.
 - The public key of the security service (`SECURITY_JWT_PUBLIC_KEY_PATH`).
 - energy-monitor-backend and the device service running, for homes and devices.
@@ -75,7 +91,8 @@ scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (`server.forward-headers-str
 ```bash
 cp .env.example .env
 cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
-# set the MYSQL_PASSWORD of infra/.env, the public key path, INTERNAL_API_TOKEN and RABBITMQ_*
+# set the MYSQL_PASSWORD of infra/.env, the public key path, INTERNAL_API_TOKEN, RABBITMQ_*
+# and the MQTT user
 ./mvnw spring-boot:run          # http://localhost:8085/actuator/health
 ```
 
@@ -86,7 +103,7 @@ SPRING_DATASOURCE_PASSWORD=... RABBITMQ_USERNAME=... RABBITMQ_PASSWORD=... ./mvn
 ```
 
 The tests run under the `test` profile against the MySQL of `infra`, with a key pair generated
-for the run. They never reach a running backend or device service.
+for the run. They never reach a running backend, device service or MQTT broker.
 
 ## Docker
 
