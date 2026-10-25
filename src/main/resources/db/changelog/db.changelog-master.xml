@@ -9,5 +9,11 @@
             Only the measurement changesets. The schema is shared with energy-monitor-backend, the
             security service and the device service (ADR-003), and so is the DATABASECHANGELOG
             table: each service applies its own changelogs.
+
+            The measurement changelogs keep the relative path they have in energy-monitor-backend:
+            Liquibase identifies a changeset by id, author and file path, so the changesets the
+            monolith already applied to the shared schema are recognised here as applied and
+            never run twice.
         -->
+        <include file="measurement/measurement-changelog.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
