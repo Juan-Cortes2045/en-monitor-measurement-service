@@ -85,6 +85,32 @@ internal-api:
   device-ttl: PT30S
   device-stale-ttl: PT1H
 
+mqtt:
+  # This service subscribes over the plain listener: the broker runs next to it, so this
+  # connection never leaves the host; devices use TLS.
+  broker-url: ${MQTT_BROKER_URL:tcp://localhost:1883}
+  # Suffixed with -telemetry. Must differ per instance and from the device service's and the
+  # backend's, which subscribe to the same topic.
+  client-id: ${MQTT_CLIENT_ID:measurement-service}
+  # The broker asks the device service whether these credentials are valid; it is given the same
+  # MQTT_MEASUREMENT_SERVICE_USER and MQTT_MEASUREMENT_SERVICE_PASS, and lets this user only read
+  # the telemetry.
+  username: ${MQTT_MEASUREMENT_SERVICE_USER:em-measurement-service}
+  password: ${MQTT_MEASUREMENT_SERVICE_PASS:}
+  inbound:
+    # Off until energy-monitor-backend stops storing the readings: with both subscribed every
+    # reading would be stored twice in the shared table.
+    enabled: ${MEASUREMENT_MQTT_ENABLED:false}
+  topics:
+    telemetry: energy-monitor/devices/+/telemetry
+  qos: 0
+  keep-alive-interval: 60
+  clean-session: true
+  connection-timeout: 30
+  # How long a subscribe, unsubscribe or disconnect waits for the broker, and how long a stopping
+  # subscription lets in-flight work finish (Paho waits 30 s for each).
+  completion-timeout: PT5S
+
 measurement:
   # A reading older than this no longer counts as the current power of a home: the threshold after
   # which the device service marks a silent device offline (its DEVICE_OFFLINE_AFTER).
