@@ -40,6 +40,22 @@ exist.
   not answer.
 - No answer and nothing kept: the request gets 503.
 
+## Events it consumes (RabbitMQ)
+
+| Queue | Exchange and routing keys | What it does |
+|---|---|---|
+| `measurement-service.device.events` | `energy-monitor.device`, `device.linked` and `device.unlinked` | Drops the cached device and the cached devices of its home, so a link or an unlink shows at once |
+
+- The queue is declared here at startup, durable, with a `.dlq` dead-letter queue on
+  `measurement-service.dlx`: a message that fails three attempts (1, 2 and 4 s apart) is moved
+  there instead of blocking the queue. A message without a `deviceId`, or of another type, is
+  dropped.
+- A message may arrive twice: forgetting twice only costs one more request.
+- Without a broker the cache still expires after 30 s, and the health is DOWN.
+- The test profile does not start the consumers. `DeviceLinksBrokerTest` runs against the RabbitMQ
+  of infra when it is reachable (export `RABBITMQ_USERNAME` and `RABBITMQ_PASSWORD`) and is
+  skipped otherwise.
+
 ## Behind the gateway
 
 From loopback or a Docker network (`172.16.0.0/12`) the container takes the caller's address and
@@ -49,8 +65,8 @@ scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (`server.forward-headers-str
 ## Requirements
 
 - Java 21 (the repository brings `./mvnw`, no Maven install needed).
-- MySQL from the `infra` repository: the schema is shared with `energy-monitor-backend`, the
-  security service and the device service.
+- MySQL and RabbitMQ from the `infra` repository: the schema is shared with
+  `energy-monitor-backend`, the security service and the device service.
 - The public key of the security service (`SECURITY_JWT_PUBLIC_KEY_PATH`).
 - energy-monitor-backend and the device service running, for homes and devices.
 
@@ -59,14 +75,14 @@ scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (`server.forward-headers-str
 ```bash
 cp .env.example .env
 cp src/main/resources/application-local.yaml.example src/main/resources/application-local.yaml
-# set the MYSQL_PASSWORD of infra/.env, the public key path and INTERNAL_API_TOKEN
+# set the MYSQL_PASSWORD of infra/.env, the public key path, INTERNAL_API_TOKEN and RABBITMQ_*
 ./mvnw spring-boot:run          # http://localhost:8085/actuator/health
 ```
 
 ## Tests
 
 ```bash
-SPRING_DATASOURCE_PASSWORD=... ./mvnw test
+SPRING_DATASOURCE_PASSWORD=... RABBITMQ_USERNAME=... RABBITMQ_PASSWORD=... ./mvnw test
 ```
 
 The tests run under the `test` profile against the MySQL of `infra`, with a key pair generated
