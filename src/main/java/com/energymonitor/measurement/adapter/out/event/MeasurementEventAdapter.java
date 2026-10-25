@@ -1,29 +1,30 @@
 package com.energymonitor.measurement.adapter.out.event;
 
+import com.energymonitor.measurement.adapter.out.messaging.MeasurementMessagePayloads.MeasurementRecordedPayload;
+import com.energymonitor.measurement.adapter.out.messaging.MeasurementMessageTypes;
+import com.energymonitor.measurement.adapter.out.messaging.MeasurementOutboxWriter;
 import com.energymonitor.measurement.api.MeasurementRecorded;
 import com.energymonitor.measurement.application.port.out.MeasurementEventPort;
-import org.springframework.context.ApplicationEventPublisher;
-import org.springframework.stereotype.Component;
 
 /**
- * Publishes measurement events to the Spring application context.
+ * Announces every recorded reading to the other services through the outbox.
  *
- * <p>Listeners in other modules (alert, recommendation) subscribe with
- * {@code @EventListener} or, once they need delivery guarantees, with Spring Modulith's
- * {@code @ApplicationModuleListener}. The publisher is unaware of them, which keeps the
- * dependency direction pointing at this module's API.
+ * <p>energy-monitor-backend hears {@code measurement.recorded} and evaluates its alerts with it.
+ * The use case publishes inside its transaction, so the outbox row commits with the reading.
  */
-@Component
 public class MeasurementEventAdapter implements MeasurementEventPort {
 
-    private final ApplicationEventPublisher publisher;
+    private final MeasurementOutboxWriter outbox;
 
-    public MeasurementEventAdapter(ApplicationEventPublisher publisher) {
-        this.publisher = publisher;
+    public MeasurementEventAdapter(MeasurementOutboxWriter outbox) {
+        this.outbox = outbox;
     }
 
     @Override
     public void publish(MeasurementRecorded event) {
-        publisher.publishEvent(event);
+        outbox.write(MeasurementMessageTypes.MEASUREMENT_RECORDED,
+                new MeasurementRecordedPayload(event.idMeasurement(), event.deviceId(), event.dateTime(),
+                        event.voltage(), event.current(), event.activePower(), event.storedEnergy()),
+                event.dateTime());
     }
 }
