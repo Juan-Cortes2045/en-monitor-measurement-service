@@ -12,20 +12,52 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.security.authorization.AuthorizationDecision;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.client.RestClient;
 
 /**
- * The calls from this service to the services that own homes and devices: whether a caller
- * belongs to a home and its limits, to energy-monitor-backend; which home a device is linked to
- * and the devices of a home, to the device service, cached. Every call carries the shared token,
- * which each of them checks together with this service's network.
+ * The calls between this service and the other services of the platform.
+ *
+ * <p>Inbound, {@code /internal/measurements/**} and {@code /internal/consumption-levels/**} get
+ * their own filter chain, evaluated before the API chain: energy-monitor-backend presents no JWT,
+ * so it is trusted by network and shared token instead (see {@link InternalCallerCheck}). Anything
+ * else is answered 403. The reverse proxy and the gateway must not forward {@code /internal/**} at
+ * all, since behind them every request seems to come from the proxy.
+ *
+ * <p>Outbound, to the services that own homes and devices: whether a caller belongs to a home and
+ * its limits, to energy-monitor-backend; which home a device is linked to and the devices of a
+ * home, to the device service, cached. Every call carries the shared token, which each of them
+ * checks together with this service's network.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(InternalApiProperties.class)
 public class InternalApiConfiguration {
 
     private static final Logger LOG = LoggerFactory.getLogger(InternalApiConfiguration.class);
+
+    @Bean
+    @Order(1)
+    public SecurityFilterChain internalApiFilterChain(HttpSecurity http, InternalApiProperties properties)
+            throws Exception {
+        InternalCallerCheck callers = new InternalCallerCheck(properties);
+        return http
+                .securityMatcher("/internal/measurements/**", "/internal/consumption-levels/**")
+                .csrf(AbstractHttpConfigurer::disable)
+                .httpBasic(AbstractHttpConfigurer::disable)
+                .formLogin(AbstractHttpConfigurer::disable)
+                .logout(AbstractHttpConfigurer::disable)
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(requests -> requests
+                        .anyRequest().access((authentication, context) ->
+                                new AuthorizationDecision(callers.trusts(context.getRequest()))))
+                .build();
+    }
 
     @Bean
     public BackendHomeClient backendHomeClient(InternalApiProperties properties) {
@@ -59,8 +91,8 @@ public class InternalApiConfiguration {
 
     private static void warnWithoutToken(InternalApiProperties properties) {
         if (properties.token() == null || properties.token().isBlank()) {
-            LOG.warn("internal-api.token is empty: energy-monitor-backend and the device service "
-                    + "will refuse every call, so no home or device can be read");
+            LOG.warn("internal-api.token is empty: every internal call is refused, both ways, so no "
+                    + "home or device can be read and the backend cannot read the readings");
         }
     }
 }
