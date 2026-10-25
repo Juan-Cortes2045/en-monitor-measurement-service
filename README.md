@@ -25,6 +25,20 @@ service's public key and issuer and takes the caller from `sub`. Only members of
 is linked to may read it: a device of another home answers 404, the same as one that does not
 exist.
 
+### Internal API (for energy-monitor-backend)
+
+| Path | Answer |
+|---|---|
+| `GET /internal/consumption-levels` | `200` with `[{idConsumptionLevel, name, description, minLimit, maxLimit}]`; a reading belongs to the level whose `[minLimit, maxLimit)` holds its power |
+| `GET /internal/measurements/hourly-energy?deviceId=..&deviceId=..&from=..&to=..` | `200` with `[{deviceId, hourStart, averagePower, energy}]` per device and UTC hour, oldest first; no `deviceId` is an empty list; a missing or inverted range is `400` |
+| `GET /internal/measurements/reporting-devices?since=..` | `200` with the ids of the devices with a reading since then |
+
+The backend reads them for the alerts (level of a reading, consumption against the limits) and the
+recommendations. The energy is computed with the same calculator as the consumption of a home.
+These paths have their own filter chain: the caller must come from `INTERNAL_API_ALLOWED_NETWORKS`
+**and** send `INTERNAL_API_TOKEN` in `X-Internal-Token`; without a token configured every call is
+refused. A user's access token does not open them, and the gateway never forwards `/internal/**`.
+
 ## Who it asks
 
 | Service | Call | For |
@@ -97,7 +111,9 @@ transactional outbox (`measurement_outbox`, changelog `measurement-004`):
 
 From loopback or a Docker network (`172.16.0.0/12`) the container takes the caller's address and
 scheme from `X-Forwarded-For` / `X-Forwarded-Proto` (`server.forward-headers-strategy=native`,
-`server.tomcat.remoteip.internal-proxies`); any other private network is not trusted.
+`server.tomcat.remoteip.internal-proxies`); any other private network is not trusted. The internal
+API checks that address: a request relayed from outside counts as the outside caller and is
+refused, even if it forwards `127.0.0.1`. `BehindGatewayTest` checks it on a running server.
 
 ## Requirements
 
