@@ -14,8 +14,9 @@ import java.time.Instant;
 /**
  * Records a measurement produced by a device and publishes {@code MeasurementRecorded}.
  *
- * <p><strong>Transactional boundary:</strong> this use case performs a single write, so a
- * transaction would add nothing but an extra connection and is deliberately omitted.
+ * <p><strong>Transactional boundary:</strong> the reading and the message announcing it are two
+ * writes that must commit together. The transaction is applied around this use case
+ * ({@code TransactionalRegisterMeasurement}), not inside it.
  *
  * <p><strong>Device existence:</strong> the MER requires {@code deviceId} to be validated at
  * application level. The telemetry consumer asks the device service before calling this use case,
@@ -47,8 +48,8 @@ public class RegisterMeasurementService implements RegisterMeasurement {
                 command.storedEnergy());
         measurementPort.save(measurement);
 
-        // Observer pattern of the class diagram: future alert and recommendation modules
-        // subscribe to this event instead of registering in-process observers.
+        // Observer pattern of the class diagram: the alerts of energy-monitor-backend subscribe to
+        // this event, delivered through the outbox, instead of registering observers here.
         events.publish(new MeasurementRecorded(measurement.idMeasurement(), measurement.deviceId(),
                 measurement.dateTime(), measurement.getVoltage(), measurement.getCurrent(),
                 measurement.getActivePower(), measurement.getStoredEnergy()));
