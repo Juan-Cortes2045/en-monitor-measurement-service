@@ -1,0 +1,45 @@
+spring:
+  config:
+    import: optional:file:.env[.properties]
+  application:
+    name: measurement-service
+
+  profiles:
+    default: local
+
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+
+  liquibase:
+    # Only the measurement changesets. The schema is shared with energy-monitor-backend, the
+    # security service and the device service (ADR-003), and so is the DATABASECHANGELOG table:
+    # each service applies its own changelogs.
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+server:
+  # 8080 is the API gateway, 8082 the security service, 8083 energy-monitor-backend and 8084 the
+  # device service when all run on the same machine.
+  port: ${SERVER_PORT:8085}
+  # The web and mobile requests come through the API gateway: from it (loopback or a Docker
+  # network) the container takes the caller's address and scheme from X-Forwarded-For and
+  # X-Forwarded-Proto. A call from outside relayed with a forwarded address therefore counts as
+  # that address, and the internal API refuses it.
+  forward-headers-strategy: native
+  tomcat:
+    # Only loopback (the gateway or nginx on this machine) and the Docker networks may set it: the
+    # default would trust every private network, and a machine of the LAN could then pass as
+    # 127.0.0.1.
+    remoteip:
+      internal-proxies: "127\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|0:0:0:0:0:0:0:1|::1|172\\.(1[6-9]|2[0-9]|3[0-1])\\.\\d{1,3}\\.\\d{1,3}"
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

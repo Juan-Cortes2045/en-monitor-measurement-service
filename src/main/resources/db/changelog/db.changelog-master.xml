@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+        https://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+        <!--
+            Only the measurement changesets. The schema is shared with energy-monitor-backend, the
+            security service and the device service (ADR-003), and so is the DATABASECHANGELOG
+            table: each service applies its own changelogs.
+        -->
+</databaseChangeLog>
