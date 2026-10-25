@@ -32,3 +32,12 @@ management:
     # No broker is required to run the suite.
     rabbit:
       enabled: false
+
+mqtt:
+  # A client id of its own: the broker disconnects a client when another one connects with the
+  # same id, so a test must never use the running service's.
+  client-id: measurement-service-test
+  password: test-only-mqtt-password
+  inbound:
+    # No subscription in the suite: the handler is tested directly.
+    enabled: false
