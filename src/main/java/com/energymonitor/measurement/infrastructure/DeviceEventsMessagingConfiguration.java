@@ -31,17 +31,26 @@ public class DeviceEventsMessagingConfiguration {
     public Declarables deviceEventQueues(
             @Value("${messaging.device-exchange}") String deviceExchange,
             @Value("${messaging.dead-letter-exchange}") String deadLetterExchange) {
+        return topology(deviceExchange, deadLetterExchange, DEVICE_EVENTS_QUEUE);
+    }
+
+    /**
+     * The exchanges, the queue with its dead-letter queue and their bindings. The queue name is a
+     * parameter so a test against a real broker declares a queue of its own: declaring the
+     * service's queue with other arguments would leave it unusable for the service.
+     */
+    static Declarables topology(String deviceExchange, String deadLetterExchange, String queue) {
         TopicExchange device = new TopicExchange(deviceExchange, true, false);
         DirectExchange deadLetters = new DirectExchange(deadLetterExchange, true, false);
-        Queue events = QueueBuilder.durable(DEVICE_EVENTS_QUEUE)
+        Queue events = QueueBuilder.durable(queue)
                 .deadLetterExchange(deadLetterExchange)
-                .deadLetterRoutingKey(DEVICE_EVENTS_QUEUE)
+                .deadLetterRoutingKey(queue)
                 .build();
-        Queue dead = QueueBuilder.durable(DEVICE_EVENTS_QUEUE + ".dlq").build();
+        Queue dead = QueueBuilder.durable(queue + ".dlq").build();
         return new Declarables(device, deadLetters, events, dead,
                 BindingBuilder.bind(events).to(device).with("device.linked"),
                 BindingBuilder.bind(events).to(device).with("device.unlinked"),
-                BindingBuilder.bind(dead).to(deadLetters).with(DEVICE_EVENTS_QUEUE));
+                BindingBuilder.bind(dead).to(deadLetters).with(queue));
     }
 
     /** Forgetting goes to the cache of devices, {@code CachedDeviceDirectory}. */

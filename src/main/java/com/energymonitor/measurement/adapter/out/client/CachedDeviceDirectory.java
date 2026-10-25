@@ -2,6 +2,7 @@ package com.energymonitor.measurement.adapter.out.client;
 
 import com.energymonitor.measurement.adapter.out.client.DeviceServiceClient.RemoteDevice;
 import com.energymonitor.measurement.application.exception.DeviceServiceUnavailableException;
+import com.energymonitor.measurement.application.port.out.DeviceRegistryPort;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import com.github.benmanes.caffeine.cache.Ticker;
@@ -11,11 +12,12 @@ import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * The devices of the device service as this service reads them: the home a device is linked to,
- * and the devices of a home.
+ * The devices of the device service as this service reads them: whether a device exists, the home
+ * it is linked to, and the devices of a home.
  *
- * <p>Answers are reused for a short while, a device that does not exist included, so a dashboard
- * refreshing every few seconds costs one request per {@code ttl}, not one per refresh. A device
+ * <p>Answers are reused for a short while, a device that does not exist included, so a module
+ * publishing every minute, or a dashboard refreshing every few seconds, costs one request per
+ * {@code ttl}, not one per reading or refresh. A device
  * linked or unlinked in the service shows here at once, when its event arrives and
  * {@link #forget} is called, or at the latest once its entry expires.
  *
@@ -23,7 +25,7 @@ import java.util.function.Function;
  * what is served, so a short outage of the device service does not stop the readings of devices
  * already known. Only with nothing kept does a call throw {@link DeviceServiceUnavailableException}.
  */
-public class CachedDeviceDirectory implements DeviceChanges {
+public class CachedDeviceDirectory implements DeviceChanges, DeviceRegistryPort {
 
     private final DeviceServiceClient client;
     private final Cache<String, Optional<RemoteDevice>> devices;
@@ -47,6 +49,19 @@ public class CachedDeviceDirectory implements DeviceChanges {
 
     private static <V> Cache<String, V> cache(Duration ttl, Ticker ticker) {
         return Caffeine.newBuilder().expireAfterWrite(ttl).maximumSize(10_000).ticker(ticker).build();
+    }
+
+    /**
+     * @param deviceId the device a reading claims to come from
+     * @return whether the device service knows it, linked to a home or not
+     * @throws DeviceServiceUnavailableException as {@link #homeOf}
+     */
+    @Override
+    public boolean exists(String deviceId) {
+        if (deviceId == null) {
+            return false;
+        }
+        return fresh(devices, lastKnownDevices, deviceId, client::device).isPresent();
     }
 
     /**

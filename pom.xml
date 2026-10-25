@@ -76,6 +76,19 @@
 			<artifactId>caffeine</artifactId>
 		</dependency>
 
+		<!-- MQTT subscription: the telemetry the modules publish, stored as readings -->
+		<dependency>
+			<groupId>org.springframework.integration</groupId>
+			<artifactId>spring-integration-mqtt</artifactId>
+		</dependency>
+
+		<!-- MQTT client used by the subscription -->
+		<dependency>
+			<groupId>org.eclipse.paho</groupId>
+			<artifactId>org.eclipse.paho.client.mqttv3</artifactId>
+			<version>1.2.5</version>
+		</dependency>
+
 		<!-- Messaging: the device events that keep the cache of devices current -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

@@ -1,12 +1,12 @@
-package com.energymonitor.measurement.adapter.in.messaging;
+package com.energymonitor.measurement.infrastructure;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.energymonitor.measurement.adapter.in.messaging.DeviceLinksConsumer;
 import com.energymonitor.measurement.adapter.out.client.DeviceChanges;
-import com.energymonitor.measurement.infrastructure.DeviceEventsMessagingConfiguration;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -28,24 +28,24 @@ import tools.jackson.databind.json.JsonMapper;
  * The queue of this service against a real RabbitMQ: the links and unlinks the device service
  * publishes reach it and the consumer forgets the device, and the connectivity events do not.
  *
- * <p>The topology is declared with exchanges of its own, deleted afterwards, so nothing the
- * device service publishes is touched. Needs a broker on {@code RABBITMQ_HOST:RABBITMQ_PORT}
+ * <p>The topology is the service's, declared with exchanges and a queue of its own, deleted
+ * afterwards: nothing the device service publishes is touched, and the service's queue is never
+ * declared with other arguments, which would leave it unusable for the service. Needs a broker on {@code RABBITMQ_HOST:RABBITMQ_PORT}
  * (localhost:5672 by default) with the credentials of {@code RABBITMQ_USERNAME} and
- * {@code RABBITMQ_PASSWORD}; without one it is skipped rather than failed. A measurement service
- * running against the same broker would compete for the messages, so stop it first.
+ * {@code RABBITMQ_PASSWORD}; without one it is skipped rather than failed.
  */
 @DisplayName("Device links over RabbitMQ")
-class DeviceLinksBrokerTest {
+class DeviceEventsBrokerTest {
 
     private static final String HOST = env("RABBITMQ_HOST", "localhost");
     private static final int PORT = Integer.parseInt(env("RABBITMQ_PORT", "5672"));
-    private static final String QUEUE = DeviceEventsMessagingConfiguration.DEVICE_EVENTS_QUEUE;
 
     private CachingConnectionFactory connections;
     private RabbitAdmin admin;
     private RabbitTemplate rabbit;
     private String exchange;
     private String deadLetters;
+    private String queue;
 
     @BeforeEach
     void connect() {
@@ -56,7 +56,8 @@ class DeviceLinksBrokerTest {
         admin = new RabbitAdmin(connections);
         exchange = "test.device." + UUID.randomUUID();
         deadLetters = "test.dlx." + UUID.randomUUID();
-        Declarables topology = new DeviceEventsMessagingConfiguration().deviceEventQueues(exchange, deadLetters);
+        queue = "test.measurement.device-events." + UUID.randomUUID();
+        Declarables topology = DeviceEventsMessagingConfiguration.topology(exchange, deadLetters, queue);
         topology.getDeclarables().forEach(declarable -> {
             switch (declarable) {
                 case org.springframework.amqp.core.Exchange e -> admin.declareExchange(e);
@@ -71,6 +72,8 @@ class DeviceLinksBrokerTest {
     @AfterEach
     void disconnect() {
         if (admin != null) {
+            admin.deleteQueue(queue);
+            admin.deleteQueue(queue + ".dlq");
             admin.deleteExchange(exchange);
             admin.deleteExchange(deadLetters);
             connections.destroy();
@@ -86,11 +89,11 @@ class DeviceLinksBrokerTest {
         send("device.connectivity-lost", "{\"deviceId\":\"DEV0000009\"}");
         send("device.linked", "{\"deviceId\":\"DEV0000001\",\"homeId\":\"hom0000001\"}");
 
-        Message received = rabbit.receive(QUEUE, 5_000);
+        Message received = rabbit.receive(queue, 5_000);
         assertThat(received).isNotNull();
         consumer.on(received);
         verify(changes).forget("DEV0000001", "hom0000001");
-        assertThat(rabbit.receive(QUEUE, 500)).isNull();
+        assertThat(rabbit.receive(queue, 500)).isNull();
     }
 
     private void send(String type, String body) {
