@@ -8,7 +8,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
 /**
- * Asks energy-monitor-backend, owner of the homes, through its internal API:
+ * Asks the home service, owner of the homes, through its internal API:
  *
  * <ul>
  *   <li>{@code GET /internal/homes/{homeId}/access?userId=...}, always 200 with
@@ -22,15 +22,15 @@ import org.springframework.web.client.RestClientException;
  * {@link HomeServiceUnavailableException}: whether a caller belongs to a home is never guessed.
  * Nothing is cached, so a member removed from a home loses access at once.
  */
-public class BackendHomeClient {
+public class HomeServiceClient {
 
-    private final RestClient backend;
+    private final RestClient homes;
 
     /**
-     * @param backend client with the backend's base URL, the timeouts and the internal token
+     * @param homes client with the home service's base URL, the timeouts and the internal token
      */
-    public BackendHomeClient(RestClient backend) {
-        this.backend = backend;
+    public HomeServiceClient(RestClient homes) {
+        this.homes = homes;
     }
 
     /**
@@ -41,7 +41,7 @@ public class BackendHomeClient {
             return false;
         }
         try {
-            return backend.get()
+            return homes.get()
                     .uri("/internal/homes/{homeId}/access?userId={userId}", homeId, userId)
                     .exchange((request, response) -> {
                         if (!response.getStatusCode().isSameCodeAs(HttpStatus.OK)) {
@@ -67,7 +67,7 @@ public class BackendHomeClient {
             return Optional.empty();
         }
         try {
-            return backend.get()
+            return homes.get()
                     .uri("/internal/homes/{homeId}/thresholds", homeId)
                     .exchange((request, response) -> {
                         if (response.getStatusCode().isSameCodeAs(HttpStatus.NOT_FOUND)) {

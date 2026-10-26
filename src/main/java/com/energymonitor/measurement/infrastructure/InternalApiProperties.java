@@ -15,7 +15,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *                         every inbound internal call
  * @param allowedNetworks  the networks an inbound internal call may come from: loopback and the
  *                         private ranges Docker uses
- * @param backendUrl       where energy-monitor-backend answers its internal endpoints
+ * @param homeServiceUrl   where the home service answers its internal endpoints
  * @param deviceServiceUrl where the device service answers its internal endpoints
  * @param connectTimeout   how long to wait for the connection to either of them
  * @param readTimeout      how long to wait for their answer
@@ -28,7 +28,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record InternalApiProperties(
         String token,
         @DefaultValue({"127.0.0.1/32", "::1/128", "172.16.0.0/12"}) List<String> allowedNetworks,
-        @DefaultValue("http://localhost:8083") URI backendUrl,
+        @DefaultValue("http://localhost:8086") URI homeServiceUrl,
         @DefaultValue("http://localhost:8084") URI deviceServiceUrl,
         @DefaultValue("PT1S") Duration connectTimeout,
         @DefaultValue("PT2S") Duration readTimeout,
