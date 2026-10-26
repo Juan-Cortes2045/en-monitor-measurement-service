@@ -14,7 +14,7 @@ class InternalCallerCheckTest {
 
     private static InternalCallerCheck check(String token) {
         return new InternalCallerCheck(new InternalApiProperties(token, List.of("127.0.0.1/32", "172.16.0.0/12"),
-                URI.create("http://localhost:8083"), URI.create("http://localhost:8084"),
+                URI.create("http://localhost:8086"), URI.create("http://localhost:8084"),
                 Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofSeconds(30), Duration.ofHours(1)));
     }
 
