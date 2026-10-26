@@ -43,8 +43,8 @@ refused. A user's access token does not open them, and the gateway never forward
 
 | Service | Call | For |
 |---|---|---|
-| energy-monitor-backend | `GET /internal/homes/{homeId}/access?userId=` | Is the caller a member of the home? |
-| energy-monitor-backend | `GET /internal/homes/{homeId}/thresholds` | Daily and monthly limits of the summary (404 = none) |
+| home service | `GET /internal/homes/{homeId}/access?userId=` | Is the caller a member of the home? |
+| home service | `GET /internal/homes/{homeId}/thresholds` | Daily and monthly limits of the summary (404 = none) |
 | device service | `GET /internal/devices/{deviceId}` | The home a device is linked to |
 | device service | `GET /internal/homes/{homeId}/devices` | The devices of a home |
 
