@@ -85,7 +85,7 @@ security:
     public-key-path: ${SECURITY_JWT_PUBLIC_KEY_PATH:}
 
 # Calls between this service and the other services. Outbound to the owners of homes and devices:
-# whether a caller belongs to a home and its limits (energy-monitor-backend), and which home a
+# whether a caller belongs to a home and its limits (the home service), and which home a
 # device is linked to (the device service); no answer within the timeouts refuses the request with
 # 503. Inbound, energy-monitor-backend reads /internal/measurements/** and
 # /internal/consumption-levels. Each side checks the other's network and the shared token; the
@@ -95,7 +95,7 @@ internal-api:
   # Generate with: openssl rand -hex 32
   token: ${INTERNAL_API_TOKEN:}
   allowed-networks: ${INTERNAL_API_ALLOWED_NETWORKS:127.0.0.1/32,::1/128,172.16.0.0/12}
-  backend-url: ${BACKEND_INTERNAL_URL:http://localhost:8083}
+  home-service-url: ${HOME_SERVICE_URL:http://localhost:8086}
   device-service-url: ${DEVICE_SERVICE_URL:http://localhost:8084}
   connect-timeout: PT1S
   read-timeout: PT2S

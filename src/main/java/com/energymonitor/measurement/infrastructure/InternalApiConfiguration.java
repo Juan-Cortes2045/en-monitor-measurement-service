@@ -1,6 +1,6 @@
 package com.energymonitor.measurement.infrastructure;
 
-import com.energymonitor.measurement.adapter.out.client.BackendHomeClient;
+import com.energymonitor.measurement.adapter.out.client.HomeServiceClient;
 import com.energymonitor.measurement.adapter.out.client.CachedDeviceDirectory;
 import com.energymonitor.measurement.adapter.out.client.DeviceServiceClient;
 import com.energymonitor.measurement.adapter.out.client.RemoteHomeAccessAdapter;
@@ -60,9 +60,9 @@ public class InternalApiConfiguration {
     }
 
     @Bean
-    public BackendHomeClient backendHomeClient(InternalApiProperties properties) {
+    public HomeServiceClient homeServiceClient(InternalApiProperties properties) {
         warnWithoutToken(properties);
-        return new BackendHomeClient(client(properties.backendUrl(), properties));
+        return new HomeServiceClient(client(properties.homeServiceUrl(), properties));
     }
 
     @Bean
@@ -73,7 +73,7 @@ public class InternalApiConfiguration {
     }
 
     @Bean
-    public HomeAccessPort homeAccess(BackendHomeClient homes, CachedDeviceDirectory devices) {
+    public HomeAccessPort homeAccess(HomeServiceClient homes, CachedDeviceDirectory devices) {
         return new RemoteHomeAccessAdapter(homes, devices);
     }
 

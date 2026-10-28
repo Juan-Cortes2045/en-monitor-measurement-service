@@ -21,17 +21,17 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
-@DisplayName("Homes read from energy-monitor-backend")
-class BackendHomeClientTest {
+@DisplayName("Homes read from the home service")
+class HomeServiceClientTest {
 
-    private static final String ACCESS = "http://backend/internal/homes/hom0000001/access?userId=use0000001";
-    private static final String THRESHOLDS = "http://backend/internal/homes/hom0000001/thresholds";
+    private static final String ACCESS = "http://home/internal/homes/hom0000001/access?userId=use0000001";
+    private static final String THRESHOLDS = "http://home/internal/homes/hom0000001/thresholds";
 
     private final RestClient.Builder builder = RestClient.builder()
-            .baseUrl("http://backend")
+            .baseUrl("http://home")
             .defaultHeader("X-Internal-Token", "secret");
-    private final MockRestServiceServer backend = MockRestServiceServer.bindTo(builder).build();
-    private final BackendHomeClient homes = new BackendHomeClient(builder.build());
+    private final MockRestServiceServer homeService = MockRestServiceServer.bindTo(builder).build();
+    private final HomeServiceClient homes = new HomeServiceClient(builder.build());
 
     private static String access(boolean exists, boolean member) {
         return "{\"exists\":" + exists + ",\"member\":" + member + ",\"owner\":false}";
@@ -40,20 +40,20 @@ class BackendHomeClientTest {
     @Test
     @DisplayName("a member of an existing home is a member, asked with the internal token")
     void member() {
-        backend.expect(requestTo(ACCESS)).andExpect(method(HttpMethod.GET))
+        homeService.expect(requestTo(ACCESS)).andExpect(method(HttpMethod.GET))
                 .andExpect(header("X-Internal-Token", "secret"))
                 .andRespond(withSuccess(access(true, true), MediaType.APPLICATION_JSON));
 
         assertThat(homes.isMember("use0000001", "hom0000001")).isTrue();
-        backend.verify();
+        homeService.verify();
     }
 
     @Test
     @DisplayName("someone outside the home, or a home that does not exist, is not a member")
     void notMember() {
-        backend.expect(requestTo(ACCESS))
+        homeService.expect(requestTo(ACCESS))
                 .andRespond(withSuccess(access(true, false), MediaType.APPLICATION_JSON));
-        backend.expect(requestTo(ACCESS))
+        homeService.expect(requestTo(ACCESS))
                 .andRespond(withSuccess(access(false, true), MediaType.APPLICATION_JSON));
 
         assertThat(homes.isMember("use0000001", "hom0000001")).isFalse();
@@ -66,15 +66,15 @@ class BackendHomeClientTest {
         assertThat(homes.isMember(null, "hom0000001")).isFalse();
         assertThat(homes.isMember("use0000001", null)).isFalse();
         assertThat(homes.limits(null)).isEmpty();
-        backend.verify();
+        homeService.verify();
     }
 
     @Test
     @DisplayName("a refused token, a server error or no answer is unavailable, never a guess")
     void accessUnavailable() {
-        backend.expect(requestTo(ACCESS)).andRespond(withStatus(HttpStatus.FORBIDDEN));
-        backend.expect(requestTo(ACCESS)).andRespond(withServerError());
-        backend.expect(requestTo(ACCESS)).andRespond(withException(new IOException("refused")));
+        homeService.expect(requestTo(ACCESS)).andRespond(withStatus(HttpStatus.FORBIDDEN));
+        homeService.expect(requestTo(ACCESS)).andRespond(withServerError());
+        homeService.expect(requestTo(ACCESS)).andRespond(withException(new IOException("refused")));
 
         for (int i = 0; i < 3; i++) {
             assertThatThrownBy(() -> homes.isMember("use0000001", "hom0000001"))
@@ -85,7 +85,7 @@ class BackendHomeClientTest {
     @Test
     @DisplayName("reads the limits of a home")
     void limits() {
-        backend.expect(requestTo(THRESHOLDS)).andExpect(header("X-Internal-Token", "secret"))
+        homeService.expect(requestTo(THRESHOLDS)).andExpect(header("X-Internal-Token", "secret"))
                 .andRespond(withSuccess("{\"dailyLimit\":10.0,\"monthlyLimit\":300.0,\"limitPeriod\":\"MONTHLY\"}",
                         MediaType.APPLICATION_JSON));
 
@@ -95,16 +95,16 @@ class BackendHomeClientTest {
     @Test
     @DisplayName("404 is a home without limits, not a failure")
     void noLimits() {
-        backend.expect(requestTo(THRESHOLDS)).andRespond(withStatus(HttpStatus.NOT_FOUND));
+        homeService.expect(requestTo(THRESHOLDS)).andRespond(withStatus(HttpStatus.NOT_FOUND));
 
         assertThat(homes.limits("hom0000001")).isEmpty();
     }
 
     @Test
-    @DisplayName("the limits of a backend that does not answer are unavailable")
+    @DisplayName("the limits of a home service that does not answer are unavailable")
     void limitsUnavailable() {
-        backend.expect(requestTo(THRESHOLDS)).andRespond(withServerError());
-        backend.expect(requestTo(THRESHOLDS)).andRespond(withException(new IOException("refused")));
+        homeService.expect(requestTo(THRESHOLDS)).andRespond(withServerError());
+        homeService.expect(requestTo(THRESHOLDS)).andRespond(withException(new IOException("refused")));
 
         assertThatThrownBy(() -> homes.limits("hom0000001")).isInstanceOf(HomeServiceUnavailableException.class);
         assertThatThrownBy(() -> homes.limits("hom0000001")).isInstanceOf(HomeServiceUnavailableException.class);

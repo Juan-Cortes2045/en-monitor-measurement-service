@@ -17,9 +17,9 @@ security:
 internal-api:
   # Test-only token, committed on purpose: it protects nothing outside the test profile.
   token: test-only-internal-token
-  # Nothing listens here, so the suite never reaches a backend or a device service running on
+  # Nothing listens here, so the suite never reaches a home or a device service running on
   # this machine.
-  backend-url: http://127.0.0.1:9
+  home-service-url: http://127.0.0.1:9
   device-service-url: http://127.0.0.1:9
 
 spring.rabbitmq.listener.simple:

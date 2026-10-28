@@ -10,10 +10,10 @@ import java.util.Optional;
  */
 public class RemoteHomeAccessAdapter implements HomeAccessPort {
 
-    private final BackendHomeClient homes;
+    private final HomeServiceClient homes;
     private final CachedDeviceDirectory devices;
 
-    public RemoteHomeAccessAdapter(BackendHomeClient homes, CachedDeviceDirectory devices) {
+    public RemoteHomeAccessAdapter(HomeServiceClient homes, CachedDeviceDirectory devices) {
         this.homes = homes;
         this.devices = devices;
     }
